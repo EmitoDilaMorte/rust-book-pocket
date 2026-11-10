@@ -5,9 +5,9 @@ interactive quizzes and can run the code samples, so you can study from a phone
 without a laptop.
 
 The app is a thin native shell around the same HTML that `mdbook` produces for
-the book. Nothing in `src/`, `quizzes/` or `listings/` is modified: the
-`pocket/book/book.toml` configuration reuses them, the same way
-`nostarch/book.toml` does for the print pipeline.
+the book. Nothing in `src/`, `quizzes/` or `listings/` is modified:
+`pocket/book/book.toml` reads them in place, and it is now the only mdBook
+configuration in the repository.
 
 ## What works today
 

@@ -1,11 +1,16 @@
+# Rust build artifacts
+target/
+tmp/
+
+# mdBook output
 book/
-*~
+
+# The app keeps its own ignore rules in pocket/.gitignore
+~*
 .idea
 .DS_Store
-target
-tmp
+.nova
 
 /src/quiz
 /src/aquascope
 .aquascope-cache
-.nova

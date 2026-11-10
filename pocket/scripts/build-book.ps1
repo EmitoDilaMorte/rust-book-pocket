@@ -27,8 +27,15 @@ try {
     }
 
     Write-Host '==> Building book (pocket/book/book.toml)'
+    # PowerShell 5.1 turns a native program's stderr into terminating errors
+    # while $ErrorActionPreference is 'Stop', and mdBook logs its progress to
+    # stderr. Relax it for the call and check the exit code instead.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     & mdbook build pocket/book
-    if ($LASTEXITCODE -ne 0) { throw "mdbook build failed with exit code $LASTEXITCODE" }
+    $exit = $LASTEXITCODE
+    $ErrorActionPreference = $previous
+    if ($exit -ne 0) { throw "mdbook build failed with exit code $exit" }
 
     # mdBook gives the playground call a hard 6 s timeout. A cold Rust
     # Playground container often needs longer, and the native bridge adds a

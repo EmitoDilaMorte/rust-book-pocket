@@ -1,149 +1,69 @@
-# The Rust Programming Language
+# Rust Book Pocket
 
-![Build Status](https://github.com/rust-lang/book/workflows/CI/badge.svg)
+An Android reader for *The Rust Programming Language* that keeps the book's
+interactive quizzes and can compile and run the code samples on the device,
+so you can study from a phone without a laptop.
 
-This repository contains the source of "The Rust Programming Language" book, specifically an experimental branch that supports interactive features like quizzes.
+The app lives in [`pocket/`](pocket/README.md). This repository holds the book
+sources it renders, so the content and the reader evolve together.
 
-**If you discovered an issue in at <https://rust-book.cs.brown.edu/>, PLEASE report the issue on THIS REPOSITORY and not elsewhere.**
+## What this repository contains
 
-[The book is available in dead-tree form from No Starch Press][nostarch].
+| Path | What it is |
+|---|---|
+| `src/` | The book's chapters, in Markdown |
+| `quizzes/` | 93 quiz files (222 questions) embedded in those chapters |
+| `listings/` | The standalone Cargo projects the chapters quote |
+| `words.dic` | Dictionary used when validating quiz text |
+| `packages/mdbook-trpl/` | The mdBook preprocessors for notes and listings |
+| `packages/trpl/` | The async helper crate used by chapter 17's examples |
+| `pocket/` | The Android app, its mdBook config and the toolchain scripts |
 
-[nostarch]: https://nostarch.com/rust-programming-language-2nd-edition
-
-You can also read the book for free online. Please see the book as shipped with
-the latest [stable], [beta], or [nightly] Rust releases. Be aware that issues
-in those versions may have been fixed in this repository already, as those
-releases are updated less frequently.
-
-[stable]: https://doc.rust-lang.org/stable/book/
-[beta]: https://doc.rust-lang.org/beta/book/
-[nightly]: https://doc.rust-lang.org/nightly/book/
-
-See the [releases] to download just the code of all the code listings that appear in the book.
-
-[releases]: https://github.com/rust-lang/book/releases
-
-## Requirements
-
-Building the book requires [mdBook], ideally the same version that
-rust-lang/rust uses in [this file][rust-mdbook]. To get it:
-
-[mdBook]: https://github.com/rust-lang/mdBook
-[rust-mdbook]: https://github.com/rust-lang/rust/blob/HEAD/src/tools/rustbook/Cargo.toml
+## Building the app
 
 ```bash
-$ cargo install mdbook --locked --version <version_num>
+cargo install mdbook --version 0.5.2 --locked
+cargo install mdbook-quiz --version 0.5.0 --locked
+
+bash pocket/scripts/build-book.sh          # Windows: pocket/scripts/build-book.ps1
+cd pocket && bash gradlew :app:assembleDebug
 ```
 
-This fork also requires a few mdBook preprocessors to support our experimental extensions. Follow the installation instructions at each link below.
+The APK lands in `pocket/app/build/outputs/apk/debug/app-debug.apk`. See
+[`pocket/README.md`](pocket/README.md) for the two build flavours (with and
+without the on-device Rust toolchain), how code execution works, and the
+`targetSdk = 28` trade-off that makes on-device compilation possible.
 
-* `mdbook-aquascope`: <https://github.com/cognitive-engineering-lab/aquascope#installation>
-* `mdbook-quiz`: <https://github.com/cognitive-engineering-lab/mdbook-quiz#installation>
+## What was removed
 
-You should install the same version of each preprocessor [used in CI](https://github.com/cognitive-engineering-lab/rust-book/blob/main/.github/workflows/main.yml).
+This started as a fork of the interactive edition maintained by the Cognitive
+Engineering Lab at Brown University. The print pipeline, the three older
+editions, the browser extensions and the upstream automation were removed
+because the app is the only way this copy of the book is consumed:
 
-Finally, you need [pnpm](https://pnpm.io/installation).
+- `first-edition/`, `second-edition/`, `2018-edition/`
+- `nostarch/`, `redirects/`, `dot/`
+- `js-extensions/`, `ci/`, `tools/`, `packages/tools/`
+- `packages/mdbook-trpl-listing/`, `packages/mdbook-trpl-note/`
+- the root `book.toml`, `ferris.css`, `ferris.js` and `theme/`
+  (the Ferris icons now live in `pocket/book/`)
 
-The book also uses two mdbook plugins which are part of this repository. If you
-do not install them, you will see warnings when building and the output will not
-look right, but you *will* still be able to build the book. To use the plugins,
-you should run:
+Upstream remains at
+[`cognitive-engineering-lab/rust-book`](https://github.com/cognitive-engineering-lab/rust-book);
+the book itself is maintained by the Rust Project at
+[`rust-lang/book`](https://github.com/rust-lang/book).
 
-```bash
-$ cargo install --locked --path packages/mdbook-trpl-listing
-$ cargo install --locked --path packages/mdbook-trpl-note
-```
+## Licensing and attribution
 
-## Building
+The book and quizzes are dual-licensed MIT/Apache-2.0:
 
-### With cargo-make
+- *The Rust Programming Language* by Steve Klabnik, Carol Nichols and Chris
+  Krycho, with contributions from the Rust Community.
+- Quiz content by the Cognitive Engineering Lab at Brown University.
 
-If you have [`cargo-make`] installed, then run:
+The app is an unofficial reader. It is not affiliated with, endorsed by or
+sponsored by the Rust Project, the Rust Foundation, the authors, Brown
+University or No Starch Press. "Rust" and the Rust logo are trademarks of the
+Rust Foundation.
 
-```bash
-$ cargo make build
-```
-
-### Without cargo-make
-
-First, build the Javascript extensions.
-
-```bash
-$ cd js-extensions
-$ pnpm init-repo
-$ cd ..
-```
-
-Then to build the book, type:
-
-```bash
-$ mdbook build
-```
-
-### Output
-
-The output will be in the `book` subdirectory. To check it out, open it in
-your web browser.
-
-_Firefox:_
-```bash
-$ firefox book/index.html                       # Linux
-$ open -a "Firefox" book/index.html             # OS X
-$ Start-Process "firefox.exe" .\book\index.html # Windows (PowerShell)
-$ start firefox.exe .\book\index.html           # Windows (Cmd)
-```
-
-_Chrome:_
-```bash
-$ google-chrome book/index.html                 # Linux
-$ open -a "Google Chrome" book/index.html       # OS X
-$ Start-Process "chrome.exe" .\book\index.html  # Windows (PowerShell)
-$ start chrome.exe .\book\index.html            # Windows (Cmd)
-```
-
-To run the tests:
-
-```bash
-$ cd packages/trpl
-$ mdbook test --library-path packages/trpl/target/debug/deps
-```
-
-## Contributing
-
-We'd love your help! Please see [CONTRIBUTING.md][contrib] to learn about the
-kinds of contributions we're looking for.
-
-[contrib]: https://github.com/rust-lang/book/blob/main/CONTRIBUTING.md
-
-Because the book is [printed][nostarch], and because we want
-to keep the online version of the book close to the print version when
-possible, it may take longer than you're used to for us to address your issue
-or pull request.
-
-So far, we've been doing a larger revision to coincide with [Rust
-Editions](https://doc.rust-lang.org/edition-guide/). Between those larger
-revisions, we will only be correcting errors. If your issue or pull request
-isn't strictly fixing an error, it might sit until the next time that we're
-working on a large revision: expect on the order of months or years. Thank you
-for your patience!
-
-### Translations
-
-We'd love help translating the book! See the [Translations] label to join in
-efforts that are currently in progress. Open a new issue to start working on
-a new language! We're waiting on [mdbook support] for multiple languages
-before we merge any in, but feel free to start!
-
-[Translations]: https://github.com/rust-lang/book/issues?q=is%3Aopen+is%3Aissue+label%3ATranslations
-[mdbook support]: https://github.com/rust-lang/mdBook/issues/5
-
-## Spellchecking
-
-To scan source files for spelling errors, you can use the `spellcheck.sh`
-script available in the `ci` directory. It needs a dictionary of valid words,
-which is provided in `ci/dictionary.txt`. If the script produces a false
-positive (say, you used the word `BTreeMap` which the script considers invalid),
-you need to add this word to `ci/dictionary.txt` (keep the sorted order for
-consistency).
-
-[`cargo-make`]: https://github.com/sagiegurari/cargo-make
+The app itself is released under the MIT or Apache-2.0 license, at your option.
