@@ -1,0 +1,53 @@
+<resources>
+    <string name="app_name">Rust Book Pocket</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_close">Close</string>
+
+    <string name="settings_section_execution">Running Rust code</string>
+    <string name="settings_execution_mode">Where to run code</string>
+    <string name="settings_mode_auto">Automatic</string>
+    <string name="settings_mode_auto_summary">Use the on-device toolchain when it is available, otherwise the Rust Playground.</string>
+    <string name="settings_mode_remote">Rust Playground</string>
+    <string name="settings_mode_remote_summary">Send code to a playground server. Requires a network connection.</string>
+    <string name="settings_mode_local">On this device</string>
+    <string name="settings_mode_local_summary">Requires the on-device Rust toolchain.</string>
+    <string name="settings_playground_url">Playground URL</string>
+    <string name="settings_playground_url_hint">https://play.rust-lang.org</string>
+    <string name="settings_playground_url_warning">This URL is not HTTPS. Code and output travel unencrypted.</string>
+
+    <string name="settings_section_reading">Reading</string>
+    <string name="settings_text_size">Text size</string>
+    <string name="settings_text_size_value">%1$d%%</string>
+    <string name="settings_clear_progress">Clear reading progress</string>
+    <string name="settings_clear_progress_summary">Forgets the last page and the scroll position of every chapter.</string>
+    <string name="settings_clear_progress_done">Reading progress cleared.</string>
+
+    <string name="settings_section_about">About</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_check_updates">Check for updates</string>
+    <string name="settings_updates_unavailable">Update checks are not configured in this build.</string>
+    <string name="settings_update_available">Version %1$s is available.</string>
+    <string name="settings_update_current">You are on the latest version.</string>
+    <string name="settings_update_open">Open release page</string>
+    <string name="settings_update_error">Could not check for updates.</string>
+    <string name="settings_licenses">Licenses and attribution</string>
+
+    <string name="licenses_title">Licenses and attribution</string>
+    <string name="licenses_body">The Rust Programming Language\nby Steve Klabnik, Carol Nichols, and Chris Krycho,\nwith contributions from the Rust Community.\n\nQuiz content by the Cognitive Engineering Lab at Brown University.\n\nBook content and quizzes are licensed under the MIT license or the Apache License, Version 2.0, at your option.\n\nThis app is an unofficial reader. It is not affiliated with, endorsed by, or sponsored by the Rust Project, the Rust Foundation, the authors, Brown University, or No Starch Press. “Rust” and the Rust logo are trademarks of the Rust Foundation.\n\nThe app itself is free software under the MIT or Apache-2.0 license. Source code and build instructions are published with the project.</string>
+    <string name="licenses_open_source">View source code</string>
+    <string name="licenses_close">Close</string>
+
+    <string name="book_missing_title">Book bundle not found</string>
+    <string name="book_missing_body">This build does not include the book content.\n\nBuild it with:\n\npocket/scripts/build-book.ps1\n\nor on macOS/Linux:\n\npocket/scripts/build-book.sh</string>
+    <string name="book_error_title">The page could not be loaded</string>
+    <string name="book_error_retry">Retry</string>
+
+    <string name="execution_offline">You are offline and the on-device compiler is not available.</string>
+    <string name="execution_local_unavailable">The on-device toolchain is not installed. Switch to the Rust Playground in settings.</string>
+    <string name="execution_rate_limited">The playground is receiving too many requests. Try again in a moment.</string>
+    <string name="execution_timeout">The playground did not answer in time.</string>
+    <string name="execution_server_error">The playground returned an error. Try again later.</string>
+    <string name="execution_invalid_response">The playground returned an unexpected response.</string>
+    <string name="execution_too_large">This snippet is too large to run.</string>
+</resources>

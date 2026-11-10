@@ -1,0 +1,101 @@
+name: pocket
+
+on:
+  push:
+    tags:
+      - "pocket-v*"
+  pull_request:
+    paths:
+      - "pocket/**"
+      - ".github/workflows/pocket.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: pocket-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      MDBOOK_VERSION: "0.5.2"
+      MDBOOK_QUIZ_VERSION: "0.5.0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache mdBook binaries
+        id: mdbook-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/mdbook
+            ~/.cargo/bin/mdbook-quiz
+          key: mdbook-${{ runner.os }}-${{ env.MDBOOK_VERSION }}-${{ env.MDBOOK_QUIZ_VERSION }}
+
+      - name: Install mdBook
+        if: steps.mdbook-cache.outputs.cache-hit != 'true'
+        run: |
+          cargo install mdbook --version "$MDBOOK_VERSION" --locked
+          cargo install mdbook-quiz --version "$MDBOOK_QUIZ_VERSION" --locked
+
+      - name: Build book bundle
+        run: bash pocket/scripts/build-book.sh
+
+      - name: Unit tests
+        working-directory: pocket
+        run: bash gradlew :app:testDebugUnitTest
+
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.POCKET_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$GITHUB_WORKSPACE/pocket/release.jks"
+            echo "POCKET_KEYSTORE_PATH=$GITHUB_WORKSPACE/pocket/release.jks" >> "$GITHUB_ENV"
+          fi
+
+      - name: Assemble release APK
+        working-directory: pocket
+        env:
+          POCKET_KEYSTORE_PASSWORD: ${{ secrets.POCKET_KEYSTORE_PASSWORD }}
+          POCKET_KEY_ALIAS: ${{ secrets.POCKET_KEY_ALIAS }}
+          POCKET_KEY_PASSWORD: ${{ secrets.POCKET_KEY_PASSWORD }}
+        run: bash gradlew :app:assembleRelease -Ppocket.updateRepo="${GITHUB_REPOSITORY}"
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          name="rust-book-pocket-${GITHUB_REF_NAME:-dev}.apk"
+          cp pocket/app/build/outputs/apk/release/*.apk "dist/$name"
+          (cd dist && sha256sum "$name" > SHA256SUMS)
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-book-pocket-apk
+          path: dist/*
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/pocket-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.apk dist/SHA256SUMS \
+            --title "Rust Book Pocket $GITHUB_REF_NAME" \
+            --generate-notes
