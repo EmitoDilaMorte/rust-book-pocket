@@ -55,6 +55,7 @@ fun ReaderRoute(viewModel: ReaderViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+    val localState by viewModel.localState.collectAsStateWithLifecycle()
 
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var bookView by remember { mutableStateOf<BookWebView?>(null) }
@@ -86,6 +87,7 @@ fun ReaderRoute(viewModel: ReaderViewModel) {
         SettingsSheet(
             settings = settings,
             updateState = updateState,
+            localState = localState,
             onDismiss = { showSettings = false },
             onExecutionModeChange = viewModel::setExecutionMode,
             onPlaygroundUrlChange = viewModel::setPlaygroundUrl,

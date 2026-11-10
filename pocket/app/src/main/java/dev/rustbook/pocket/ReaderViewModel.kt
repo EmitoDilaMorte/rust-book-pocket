@@ -8,6 +8,10 @@ import dev.rustbook.pocket.data.AppPreferences
 import dev.rustbook.pocket.data.ReaderSettings
 import dev.rustbook.pocket.runner.ExecutionMode
 import dev.rustbook.pocket.runner.ExecutorRouter
+import dev.rustbook.pocket.runner.LocalExecutor
+import dev.rustbook.pocket.runner.LocalToolchain
+import dev.rustbook.pocket.runner.LocalToolchainInstaller
+import dev.rustbook.pocket.runner.LocalToolState
 import dev.rustbook.pocket.runner.PlaygroundRequest
 import dev.rustbook.pocket.runner.RemoteExecutor
 import dev.rustbook.pocket.runner.RustExecutor
@@ -30,6 +34,8 @@ data class ReaderUiState(
 )
 
 class ReaderViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val app: Application = application
 
     private val preferences = AppPreferences(application)
 
@@ -58,15 +64,61 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     )
 
     /**
-     * The on-device executor is not wired up yet; when it lands it slots in
-     * here and the router starts preferring it in `AUTO` mode.
+     * On-device compilation is optional: when the toolchain pack is absent the
+     * router simply keeps using the playground.
      */
+    private val localToolchain = LocalToolchain(application)
+    private val localExecutor = LocalExecutor(localToolchain)
+    private val localInstaller = LocalToolchainInstaller(application, localToolchain)
+
     val executor: RustExecutor = ExecutorRouter(
         remote = RemoteExecutor(httpClient) { _settings.value.playgroundUrl },
-        local = null,
+        local = localExecutor,
         mode = { _settings.value.executionMode },
         isOnline = { NetworkStatus.isOnline(getApplication()) },
     )
+
+    private val _localState = MutableStateFlow<LocalToolState>(LocalToolState.Unknown)
+    val localState: StateFlow<LocalToolState> = _localState.asStateFlow()
+
+    init {
+        prepareLocalToolchain()
+    }
+
+    /**
+     * Unpacks the bundled toolchain once per version. Runs in the background so
+     * the reader can start immediately; `AUTO` mode only prefers the device
+     * once the state is [LocalToolState.Ready].
+     */
+    private fun prepareLocalToolchain() {
+        viewModelScope.launch {
+            val packaged = runCatching {
+                app.assets.open("toolchain/toolchain.zip").close()
+            }.isSuccess
+
+            if (!packaged) {
+                _localState.value = LocalToolState.NotPackaged
+                return@launch
+            }
+
+            if (localToolchain.isComplete) {
+                _localState.value = LocalToolState.Ready
+                return@launch
+            }
+
+            _localState.value = LocalToolState.Installing(0)
+            val result = localInstaller.ensureInstalled { progress ->
+                _localState.value = LocalToolState.Installing(progress.bytesWritten)
+            }
+
+            _localState.value = result.fold(
+                onSuccess = {
+                    if (localToolchain.isComplete) LocalToolState.Ready else LocalToolState.Failed
+                },
+                onFailure = { LocalToolState.Failed },
+            )
+        }
+    }
 
     init {
         viewModelScope.launch {

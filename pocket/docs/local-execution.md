@@ -1,100 +1,110 @@
 # Running Rust on the device
 
-Status: **not implemented**. The app currently routes every run to the Rust
-Playground (public or self-hosted). This document is the working plan for the
-local executor.
+Status: **working**. Both executors ship in the app; the on-device one is used
+in `AUTO` mode whenever the toolchain is unpacked and the snippet is `std`-only.
 
-## Goal
+## Measured results
 
-Compile and run the book's code snippets with no network connection, fast
-enough to feel like a notebook: a few seconds for the small programs in
-chapters 1–6, and no more than ~10 seconds for the longest examples.
+Device: Xiaomi 2602EPTC0G (Snapdragon, arm64), Android 16 (API 36),
+12 GB RAM, 869 GB free.
 
-## Constraints
+| Metric | Result |
+|---|---|
+| First compile in the app (cold page cache) | **1022 ms** |
+| Subsequent compiles in the app | **408 ms** |
+| Compiles via shell harness (5 runs) | 366–458 ms |
+| Output binary size | 584 KB |
+| Compiler errors | forwarded verbatim, paths rewritten to `main.rs` |
+| Offline | yes, no network involved |
+| Toolchain archive in APK | 192 MB stored |
+| Release APK with the toolchain | **199 MB** |
+| Debug APK with the toolchain | 209 MB |
+| Free RAM during compile | ~3.9 GB of 11.5 GB |
 
-- **No `execve` from the app's data directory.** Since Android 10, apps cannot
-  execute files they wrote to their private storage ([W^X]). Only code inside
-  the APK (native libraries) is executable directly.
-- **No Play Store.** The app ships as an APK from GitHub Releases, so download
-  size and bundling rules are much more forgiving than for a store listing. A
-  ~300 MB optional toolchain pack is acceptable if the user opts in.
-- **Only `std`.** Snippets that use `rand` (chapter 2) or `trpl` (chapter 17)
-  must stay on the playground unless those crates are vendored too.
-- **Device storage and RAM vary.** The toolchain should be optional, verified
-  with a checksum, and removable from the settings screen.
+The original target (under 10 s cold, under 3 s warm) is met with a wide margin.
 
-[W^X]: https://developer.android.com/about/versions/10/behavior-changes-10#execute-permission
+## The decision that made it possible: `targetSdk = 28`
 
-## Approach A (preferred): bundled `rustc` + `std` + `lld`, launched with `memfd`
+Android 10+ refuses `execve()` on files in the app's data directory
+(W^X). Measurements from inside the app:
 
-1. Build or obtain `rustc`, `rust-std` and `rust-lld` for
-   `aarch64-linux-android`. The Termux project already maintains the patches
-   needed to build this toolchain for Android; pin a version and record the
-   patches used.
-2. Ship the binaries in an APK asset pack or as native libraries under
-   `jniLibs/arm64-v8a/`. Native libraries are extracted to
-   `nativeLibraryDir`, which is executable.
-3. For the compiler output (a freshly written ELF binary), read the file into
-   memory and execute it with a small native helper that calls
-   `memfd_create` + `fexecve`, or use `/proc/self/fd/<n>`. This keeps the
-   binary out of the app's data directory and satisfies W^X.
-4. Run `rustc --edition 2024 --crate-type bin` with a private
-   `--sysroot` inside a scratch directory, a wall-clock timeout, and a byte
-   limit on captured output.
+| Route | Result |
+|---|---|
+| Executable in `filesDir` | `error=13, Permission denied` |
+| Executable in `filesDir` via a memfd helper in `filesDir` | same failure — the helper itself cannot run |
+| Executable in `nativeLibraryDir` | works |
+| Executable in `filesDir`, with `targetSdk = 28` | **works** |
 
-### Open questions
+Keeping the legacy target keeps the old behaviour, which is exactly what
+Termux does. That single line removes three problems at once:
 
-- Does `rustc` itself run when launched from `nativeLibraryDir`, or does it
-  also need the `memfd` helper (it spawns `rust-lld` and reads its own
-  sysroot)?
-- How large is a stripped `rustc` + `std` + `lld` for one ABI? Estimate:
-  250–400 MB installed.
-- Cold compile time on a mid-range phone: expect 1–4 s for a hello world with
-  `-C debuginfo=0 -C opt-level=0`.
+- the toolchain unpacks from assets into an ordinary directory, keeping its
+  original file names and SONAMEs (no `patchelf`, no renames, no `jniLibs`),
+- the compiler runs directly,
+- the binaries it produces run directly.
 
-## Approach B: userland sandbox (fallback)
+Downsides: Play Store would reject this target; the app is distributed as an
+APK from GitHub Releases, so that trade-off is acceptable. Android may show a
+compatibility warning on very new releases; nothing else changes.
 
-Ship a minimal Linux userland (Termux-style) and run the toolchain inside it
-with `proot`. This avoids the `exec` restriction but adds a lot of size and
-complexity, and slows every compile. Only pursue if Approach A fails.
+## What the spike established
 
-## Approach C: WASM (rejected)
+1. **Termux's `rustc` runs on Android without Termux installed.** The `.deb`
+   payloads are extracted on the build machine and repackaged. Version:
+   Rust 1.99.1 (`58cf8f9c3`, 2026-10-13).
+2. **The toolchain needs a specific layout.** `rustc` is a 4.7 KB launcher
+   whose `DT_NEEDED` is `librustc_driver-<hash>.so`; the driver needs
+   `libLLVM.so`, `libc++_shared.so`, `libandroid-execinfo.so`,
+   `libandroid-support.so`, `libxml2.so.16`, `libz.so.1`, `libzstd.so.1`,
+   `libffi.so`, `libncursesw.so.6`, `libiconv.so` and `liblzma.so.5`.
+3. **`.rmeta` files are mandatory.** Termux builds Rust with metadata stubs in
+   the `.rlib`s; deleting `.rmeta` to save space breaks every compile with
+   "only metadata stub found for rlib dependency `std`".
+4. **Linking needs clang plus `-L<libdir>`**, for `libunwind.a` and the crt
+   objects. `-C linker=<clang>` alone fails with `unable to find library
+   -lunwind`.
+5. **Termux's symlinks matter.** `bin/rust-lld` → `lld` and the
+   `lib/lib*.so` → `rustlib/aarch64-linux-android/lib/*.so` links are
+   recreated as real files during packaging, because Windows' `tar` cannot
+   create symlinks.
 
-Running a Rust compiler inside a WASM runtime on the phone is not practical:
-there is no maintained `rustc` build targeting WASI that can also produce
-Android binaries.
+## Packaging
 
-## Integration points (already in place)
+`pocket/spikes/local-exec/` contains the whole pipeline:
 
-- `RustExecutor` is the only interface the bridge sees.
-- `ExecutorRouter` implements `AUTO` / `REMOTE` / `LOCAL` and already prefers
-  the local executor when it is available and the snippet is `std`-only.
-- `CodeHeuristics.requiresExternalCrates` decides when a snippet must go to
-  the playground.
-- The settings sheet already shows the three modes; `LOCAL` is disabled until
-  the executor reports itself available.
+| Script | Purpose |
+|---|---|
+| `stage-toolchain.ps1` | Copies the core of the `.deb` payload into a tree |
+| `merge-packages.ps1` | Merges clang, libllvm, lld, ndk-sysroot, libc++, rust-std |
+| `trim-stage.ps1` | Drops other ABIs, `.rmeta`-free tools, editor binaries |
+| `package-toolchain.ps1` | Zips `bin/`, `lib/` into `app/src/main/assets/toolchain/toolchain.zip` |
+| `compile-test.sh`, `perf-test.sh` | Shell harnesses used for the measurements |
 
-Wiring the toolchain in means:
+The archive is stored uncompressed in the APK (`noCompress += "zip"`) and
+unpacked once at first launch by `LocalToolchainInstaller`, which marks the
+install with `.version`. Bump `LocalToolchain.VERSION` when repackaging.
 
-1. Implement `LocalExecutor : RustExecutor` (`isAvailable`, `execute`).
-2. Implement `LocalToolchainManager` (install / verify / delete / size).
-3. Pass the manager's executor to `ExecutorRouter` in `ReaderViewModel`.
-4. Enable the `LOCAL` radio button when `isAvailable()` is true.
+The `.deb` files themselves are not committed; re-download them from
+`packages.termux.dev` if the toolchain has to be rebuilt.
 
-## Spike checklist
+## Distribution
 
-- [ ] `rustc --version` runs on a physical arm64 device from
-      `nativeLibraryDir`.
-- [ ] A hello-world binary produced at runtime runs through the `memfd`
-      helper.
-- [ ] A snippet with a compile error returns the compiler's stderr unchanged.
-- [ ] A snippet that loops forever is killed after the timeout.
-- [ ] Peak RSS stays below 1.5 GB for the chapter 1–6 examples.
-- [ ] Install size, cold/warm compile times and battery impact are recorded in
-      this document.
+Two shapes are supported, and both are built from the same sources:
 
-## Decision log
-
-| Date | Decision | Reason |
+| Build | Size | Local execution |
 |---|---|---|
-| — | Ship remote first | Unblocks reading and running while the toolchain spike runs. |
+| **Lite** (CI, no toolchain assets) | ~17 MB | unavailable; the settings row is disabled with an explanation |
+| **Full** (built locally with `package-toolchain.ps1`) | 199 MB release | available |
+
+The CI workflow produces the lite APK because the packaging scripts are
+PowerShell. A release that wants on-device execution attaches the full APK
+built on a Windows machine.
+
+## Remaining work
+
+1. Rewrite the packaging scripts in bash so CI can produce the full APK.
+2. Measure battery and thermal behaviour over ten consecutive compiles.
+3. Consider an optional second APK / asset pack so the base download stays
+   small and the toolchain is opt-in.
+4. Add a check that the toolchain's glibc-free assumptions still hold if the
+   pinned Rust version is bumped.

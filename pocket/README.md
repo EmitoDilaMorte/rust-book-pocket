@@ -6,7 +6,7 @@ without a laptop.
 
 The app is a thin native shell around the same HTML that `mdbook` produces for
 the book. Nothing in `src/`, `quizzes/` or `listings/` is modified: the
-`socket/book/book.toml` configuration reuses them, the same way
+`pocket/book/book.toml` configuration reuses them, the same way
 `nostarch/book.toml` does for the print pipeline.
 
 ## What works today
@@ -14,9 +14,12 @@ the book. Nothing in `src/`, `quizzes/` or `listings/` is modified: the
 - Full book, all 21 chapters and appendices, bundled offline in the APK.
 - All 93 quizzes (222 questions) rendered by `mdbook-quiz`.
 - Search, themes, sidebar navigation and the book's own typography.
-- **Run** buttons on code blocks, executed through the Rust Playground API.
-- A tiny settings sheet (gear icon in the book's menu bar) with:
-  - execution mode: automatic / playground (on-device is not available yet),
+- **Run** buttons on code blocks, with two executors:
+  - **on this device** — a Rust 1.99.1 toolchain unpacked from the APK,
+    offline, ~0.4–1 s per compile on a mid-range phone;
+  - **Rust Playground** — public instance or any self-hosted one.
+- A settings sheet (gear icon in the book's menu bar) with:
+  - execution mode: automatic / playground / on this device,
   - custom playground URL for self-hosted instances,
   - text size,
   - clear reading progress,
@@ -26,11 +29,34 @@ the book. Nothing in `src/`, `quizzes/` or `listings/` is modified: the
 
 ## Not implemented yet
 
-- Running Rust on the device. The `RustExecutor` interface and the routing
-  logic are in place; the bundled toolchain is the next milestone. See
-  [`docs/local-execution.md`](docs/local-execution.md).
 - Editing code blocks. The bundled `mdBook` only makes blocks editable when the
   book source marks them ` ```rust,editable `.
+- Crates in on-device mode. Snippets that use `rand` (chapter 2) or `trpl`
+  (chapter 17) are sent to the playground automatically, because the bundled
+  toolchain only ships `std`.
+
+## Two builds
+
+| Build | Size | On-device execution |
+|---|---|---|
+| **Lite** (produced by CI) | ~17 MB | no; the settings row is disabled |
+| **Full** | ~199 MB | yes |
+
+The toolchain is not committed. To build the full APK, run
+`pocket/spikes/local-exec/package-toolchain.ps1` once (it downloads nothing by
+itself; see [`docs/local-execution.md`](docs/local-execution.md)) and rebuild.
+
+## Minimum API level and the `targetSdk = 28` trade-off
+
+The app targets SDK 28 on purpose. Since Android 10, an app cannot `execve()`
+files it wrote itself, which would rule out running a compiler from the app's
+own storage. Keeping the legacy target keeps that behaviour, the same choice
+Termux makes, and it is what makes on-device Rust possible.
+
+The app is distributed as an APK from GitHub Releases, so the Play Store rule
+that requires a recent target does not apply. See
+[`docs/local-execution.md`](docs/local-execution.md) for the measurements and
+the alternatives that were ruled out.
 
 ## Requirements
 
@@ -63,8 +89,9 @@ bash gradlew :app:assembleDebug
 
 The first command builds the mobile book bundle and copies it to
 `pocket/app/src/main/assets/book/`. The APK is written to
-`pocket/app/build/outputs/apk/debug/app-debug.apk` and is around 16 MB with the
-whole book inside.
+`pocket/app/build/outputs/apk/debug/app-debug.apk`: around 17 MB with the book
+inside, or around 209 MB when the optional toolchain archive is present (the
+release build lands around 199 MB).
 
 If you open the project in Android Studio, run the book script first (or the
 app will show a "book bundle not found" screen).
@@ -102,15 +129,28 @@ the network:
 book JS  ->  pocket.js  ->  window.RustPocket.post(id, body)
                                 |
                                 v
-                    ExecutorRouter -> RemoteExecutor (OkHttp)
-                                |
-                                v
+                    ExecutorRouter
+                     /            \
+      LocalExecutor            RemoteExecutor (OkHttp)
+   (bundled toolchain)        (play.rust-lang.org)
+                     \            /
+                      v          v
             window.__rustPocketResolve(id, {success, stdout, stderr})
 ```
 
-The bridge answers `/meta/crates` locally (so Run buttons work offline) and
+The bridge answers `/meta/crates` locally (so Run buttons appear offline) and
 maps the legacy `evaluate.json` shape to the modern `/execute` response. It also
 raises mdBook's hard-coded 6 second timeout during the bundle build.
+
+`ExecutorRouter` picks an executor per snippet: `LOCAL` never uploads silently,
+`REMOTE` always uses the network, and `AUTO` prefers the device when the
+toolchain is installed and the snippet does not import a crate that only the
+playground has.
+
+One quirk is worth knowing: mdBook asks `/meta/crates` while the page loads to
+decide whether to show a Run button, and that can happen before the bridge is
+installed. `pocket.js` re-applies the same rule locally, so the buttons work
+offline and in either script order.
 
 Rust Playground has no SLA and no documented API contract. Failures are mapped
 to readable messages (offline, rate limited, timeout, server error) instead of
@@ -125,10 +165,11 @@ pocket/
   app/             Android module (Compose shell + WebView)
     src/main/java/dev/rustbook/pocket/
       book/        WebView setup, asset loading and the JS bridge
-      runner/      request/result models, remote executor, router
+      runner/      request/result models, executors, router, toolchain layout
       data/        DataStore preferences and reading progress
       ui/          Compose settings sheet and reader screen
       update/      GitHub Releases check
+  spikes/          scripts that produced the on-device toolchain
   docs/            design notes and decisions
 ```
 

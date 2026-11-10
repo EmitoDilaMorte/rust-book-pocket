@@ -40,6 +40,7 @@ import dev.rustbook.pocket.BuildConfig
 import dev.rustbook.pocket.R
 import dev.rustbook.pocket.data.ReaderSettings
 import dev.rustbook.pocket.runner.ExecutionMode
+import dev.rustbook.pocket.runner.LocalToolState
 import dev.rustbook.pocket.update.UpdateState
 import kotlinx.coroutines.delay
 
@@ -48,6 +49,7 @@ import kotlinx.coroutines.delay
 fun SettingsSheet(
     settings: ReaderSettings,
     updateState: UpdateState,
+    localState: LocalToolState,
     onDismiss: () -> Unit,
     onExecutionModeChange: (ExecutionMode) -> Unit,
     onPlaygroundUrlChange: (String) -> Unit,
@@ -93,9 +95,18 @@ fun SettingsSheet(
             )
             ExecutionModeRow(
                 label = stringResource(R.string.settings_mode_local),
-                summary = stringResource(R.string.settings_mode_local_summary),
+                summary = when (localState) {
+                    is LocalToolState.Ready -> stringResource(R.string.settings_mode_local_summary)
+                    is LocalToolState.Installing -> stringResource(
+                        R.string.settings_mode_local_installing,
+                        localState.bytesWritten / (1024 * 1024),
+                    )
+
+                    is LocalToolState.Failed -> stringResource(R.string.settings_mode_local_failed)
+                    else -> stringResource(R.string.settings_mode_local_missing)
+                },
                 selected = settings.executionMode == ExecutionMode.LOCAL,
-                enabled = false,
+                enabled = localState is LocalToolState.Ready,
                 onSelect = { onExecutionModeChange(ExecutionMode.LOCAL) },
             )
 

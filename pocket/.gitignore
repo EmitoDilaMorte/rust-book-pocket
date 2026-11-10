@@ -10,6 +10,16 @@ local.properties
 # Generated book bundle copied into the app's assets
 app/src/main/assets/book/
 
+# Optional on-device Rust toolchain, produced by
+# spikes/local-exec/package-toolchain.ps1. Too large to commit.
+app/src/main/assets/toolchain/
+
+# Debug-only probe binaries, copied from the device during the spike
+app/src/debug/assets/execprobe/
+
+# Generated Rust toolchain archive (see spikes/local-exec/package-toolchain.ps1)
+app/src/main/assets/toolchain/
+
 # IDE
 .idea/
 *.iml

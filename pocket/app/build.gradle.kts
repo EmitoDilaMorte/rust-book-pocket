@@ -18,7 +18,7 @@ android {
     defaultConfig {
         applicationId = "dev.rustbook.pocket"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 28
         versionCode = 1
         versionName = "0.1.0"
 
@@ -77,6 +77,13 @@ android {
     lint {
         abortOnError = true
         warningsAsErrors = false
+
+        // This app is distributed as an APK from GitHub Releases, not through
+        // Google Play. targetSdk 28 is deliberate: it keeps the legacy
+        // behaviour that lets an app execute files it wrote itself, which is
+        // what makes the on-device Rust toolchain possible. See
+        // pocket/docs/local-execution.md.
+        disable += "ExpiredTargetSdkVersion"
     }
 
     packaging {
@@ -86,6 +93,14 @@ android {
                 "/META-INF/DEPENDENCIES",
             )
         }
+
+        // Only needed for debug builds: the exec probe checks whether native
+        // libraries can be executed from the APK's extraction directory.
+        jniLibs.useLegacyPackaging = true
+    }
+
+    androidResources {
+        noCompress += "zip"
     }
 }
 

@@ -11,7 +11,10 @@
     <string name="settings_mode_remote">Rust Playground</string>
     <string name="settings_mode_remote_summary">Send code to a playground server. Requires a network connection.</string>
     <string name="settings_mode_local">On this device</string>
-    <string name="settings_mode_local_summary">Requires the on-device Rust toolchain.</string>
+    <string name="settings_mode_local_summary">Compiles with the Rust toolchain bundled in this build. Works offline.</string>
+    <string name="settings_mode_local_installing">Unpacking the Rust compiler… %1$d MB</string>
+    <string name="settings_mode_local_failed">The bundled toolchain could not be installed.</string>
+    <string name="settings_mode_local_missing">This build does not include the on-device Rust toolchain.</string>
     <string name="settings_playground_url">Playground URL</string>
     <string name="settings_playground_url_hint">https://play.rust-lang.org</string>
     <string name="settings_playground_url_warning">This URL is not HTTPS. Code and output travel unencrypted.</string>
