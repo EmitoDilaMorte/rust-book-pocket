@@ -92,11 +92,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
      */
     private fun prepareLocalToolchain() {
         viewModelScope.launch {
-            val packaged = runCatching {
-                app.assets.open("toolchain/toolchain.zip").close()
-            }.isSuccess
-
-            if (!packaged) {
+            if (!localInstaller.isPackaged()) {
                 _localState.value = LocalToolState.NotPackaged
                 return@launch
             }

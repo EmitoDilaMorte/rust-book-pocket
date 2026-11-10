@@ -63,11 +63,8 @@ class LocalToolchain(context: Context) {
         workDir.mkdirs()
     }
 
-    companion object {
-        /**
-         * Version of the packaged toolchain. Bump it when repackaging so
-         * existing installs refresh themselves.
-         */
-        const val VERSION = "rust-1.99.1-android-2026-11.4"
+    /** Records the version after a successful unpack. */
+    fun markInstalled(version: String) {
+        runCatching { marker.writeText("$version\n") }
     }
 }

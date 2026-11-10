@@ -39,12 +39,18 @@ configuration in the repository.
 
 | Build | Size | On-device execution |
 |---|---|---|
-| **Lite** (produced by CI) | ~17 MB | no; the settings row is disabled |
-| **Full** | ~199 MB | yes |
+| **Lite** (CI, every pull request) | ~17 MB | no; the settings row is disabled |
+| **Full** (CI on tags) | 242 MB debug | yes |
 
-The toolchain is not committed. To build the full APK, run
-`pocket/spikes/local-exec/package-toolchain.ps1` once (it downloads nothing by
-itself; see [`docs/local-execution.md`](docs/local-execution.md)) and rebuild.
+The toolchain is not committed. To build the full APK yourself:
+
+```bash
+bash pocket/spikes/local-exec/build-toolchain.sh   # downloads + repacks, verifies checksums
+cd pocket && bash gradlew :app:assembleDebug
+```
+
+The script caches the Termux packages in `~/.cache/pocket-toolchain`, so a
+second run takes a few seconds. On Windows it works from WSL.
 
 ## Minimum API level and the `targetSdk = 28` trade-off
 
@@ -90,8 +96,7 @@ bash gradlew :app:assembleDebug
 The first command builds the mobile book bundle and copies it to
 `pocket/app/src/main/assets/book/`. The APK is written to
 `pocket/app/build/outputs/apk/debug/app-debug.apk`: around 17 MB with the book
-inside, or around 209 MB when the optional toolchain archive is present (the
-release build lands around 199 MB).
+inside, or around 242 MB when the optional toolchain archive is present.
 
 If you open the project in Android Studio, run the book script first (or the
 app will show a "book bundle not found" screen).

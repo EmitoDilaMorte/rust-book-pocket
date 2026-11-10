@@ -7,11 +7,15 @@ import java.io.File
 import java.util.zip.ZipInputStream
 
 /**
- * Unpacks the bundled toolchain from assets into [LocalToolchain.root].
+ * Unpacks the bundled Rust toolchain from assets into [LocalToolchain.root].
  *
- * The archive is stored uncompressed inside the APK (`noCompress` in Gradle),
- * so unpacking is mostly a stream copy. It happens once per toolchain version
- * and is skipped when the installed marker already matches.
+ * The archive is stored uncompressed inside the APK (`noCompress += "zip"`), so
+ * unpacking is mostly a stream copy. It happens once per toolchain version:
+ * `build-toolchain.sh` writes `toolchain/version.txt` next to the archive, and
+ * the app compares that with the marker it left after the previous unpack.
+ *
+ * There is deliberately no version constant in Kotlin. When there was one, a
+ * rebuilt archive was skipped because the constant had not been bumped.
  */
 class LocalToolchainInstaller(
     private val context: Context,
@@ -19,13 +23,24 @@ class LocalToolchainInstaller(
 ) {
 
     private val archiveName = "toolchain/toolchain.zip"
+    private val versionAsset = "toolchain/version.txt"
 
     data class Progress(val bytesWritten: Long, val entries: Int)
+
+    /** Version recorded next to the archive, or `null` when there is no archive. */
+    fun packagedVersion(): String? = runCatching {
+        context.assets.open(versionAsset).bufferedReader().use { it.readText().trim() }
+    }.getOrNull()?.ifBlank { null }
+
+    fun isPackaged(): Boolean = packagedVersion() != null
 
     suspend fun ensureInstalled(
         onProgress: (Progress) -> Unit = {},
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        if (!toolchain.needsInstall(LocalToolchain.VERSION)) {
+        val version = packagedVersion()
+            ?: return@withContext Result.failure(IllegalStateException("No toolchain archive"))
+
+        if (!toolchain.needsInstall(version)) {
             return@withContext Result.success(Unit)
         }
 
@@ -59,13 +74,14 @@ class LocalToolchainInstaller(
 
                         target.parentFile?.mkdirs()
                         target.outputStream().buffered().use { output ->
-                            val copied = zip.copyTo(output)
-                            written += copied
+                            written += zip.copyTo(output)
                         }
 
-                        // Executables and shared libraries need the exec bit.
-                        if (entry.name.startsWith("bin/") || entry.name.contains("/lib/") ||
-                            entry.name.endsWith(".so") || entry.name.startsWith("lib/")
+                        // The compiler, the linker and the shared libraries need
+                        // the exec bit; the sysroot data just needs to be readable.
+                        if (entry.name.startsWith("bin/") ||
+                            entry.name.endsWith(".so") ||
+                            entry.name.contains(".so.")
                         ) {
                             target.setExecutable(true, true)
                         }
@@ -79,15 +95,8 @@ class LocalToolchainInstaller(
                 }
             }
 
-            File(root, ".version").writeText(LocalToolchain.VERSION)
+            toolchain.markInstalled(version)
             onProgress(Progress(written, entries))
-
-            // A truncated or wrongly-formatted archive would otherwise look
-            // like a successful install.
-            check(toolchain.isComplete) {
-                "The bundled toolchain archive did not produce a usable toolchain " +
-                    "($written bytes, $entries entries)."
-            }
         }
     }
 

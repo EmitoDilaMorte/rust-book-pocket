@@ -5,7 +5,11 @@
 # assets, unpacked at first launch, keeping its original file names and SONAMEs.
 # Nothing has to be renamed, patched, or moved into jniLibs.
 #
-# Output: app/src/main/assets/toolchain/toolchain.zip (~150 MB)
+# `build-toolchain.sh` does the whole job from a pinned package list and is what
+# CI uses. This script is the Windows path: it repacks a tree prepared by
+# stage-toolchain.ps1, merge-packages.ps1 and trim-stage.ps1.
+#
+# Output: app/src/main/assets/toolchain/toolchain.zip (~200 MB)
 param(
     [string]$Stage = "$env:TEMP\termux-rust\stage",
     [string]$App = "$PSScriptRoot\..\..\app"
@@ -101,7 +105,19 @@ finally { Pop-Location }
 
 if (-not (Test-Path $zip)) { throw 'tar failed to create the archive' }
 
+# The app reads this file to decide whether to unpack; see
+# LocalToolchainInstaller. Keep it in sync with toolchain-version.txt.
+$versionFile = Join-Path $PSScriptRoot 'toolchain-version.txt'
+$version = if (Test-Path $versionFile) {
+    (Get-Content $versionFile -Raw).Trim()
+} else {
+    'rust-unknown'
+}
+Set-Content -Path (Join-Path $assets 'version.txt') -Value $version -NoNewline
+Set-Content -Path (Join-Path $payload '.version') -Value $version -NoNewline
+
 Write-Output ("toolchain.zip: {0:N0} MB" -f ((Get-Item $zip).Length / 1MB))
 Write-Output ("Unpacked size on device: about {0:N0} MB" -f $payloadMb)
+Write-Output ("Version: $version")
 Write-Output ''
 Write-Output 'Bump LocalToolchain.VERSION whenever you repackage the toolchain.'

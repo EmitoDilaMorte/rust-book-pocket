@@ -117,6 +117,12 @@ class LocalExecutor(
                 "${toolchain.root.absolutePath}/lib:" +
                     "${toolchain.root.absolutePath}/lib/rustlib/aarch64-linux-android/lib",
             )
+            // clang looks the linker up by name; the toolchain ships `ld` as a
+            // copy of lld, so make sure its own directory is searched first.
+            put(
+                "PATH",
+                "${toolchain.root.absolutePath}/bin:" + (System.getenv("PATH") ?: "/system/bin"),
+            )
             put("TMPDIR", workingDir.absolutePath)
             put("HOME", workingDir.absolutePath)
             put("RUST_BACKTRACE", "0")

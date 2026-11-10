@@ -7,6 +7,10 @@ on:
   pull_request:
     paths:
       - "pocket/**"
+      - "src/**"
+      - "quizzes/**"
+      - "listings/**"
+      - "words.dic"
       - ".github/workflows/pocket.yml"
   workflow_dispatch:
 
@@ -14,15 +18,17 @@ concurrency:
   group: pocket-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  MDBOOK_VERSION: "0.5.2"
+  MDBOOK_QUIZ_VERSION: "0.5.0"
+
 jobs:
-  build:
+  # Lite build: app plus the book, no on-device compiler (~17 MB). Runs on every
+  # pull request, which is enough to catch book, quiz or app regressions.
+  lite:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-
-    env:
-      MDBOOK_VERSION: "0.5.2"
-      MDBOOK_QUIZ_VERSION: "0.5.0"
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -61,18 +67,70 @@ jobs:
         working-directory: pocket
         run: bash gradlew :app:testDebugUnitTest
 
-      - name: Prepare signing key
-        env:
-          KEYSTORE_BASE64: ${{ secrets.POCKET_KEYSTORE_BASE64 }}
-        run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "$GITHUB_WORKSPACE/pocket/release.jks"
-            echo "POCKET_KEYSTORE_PATH=$GITHUB_WORKSPACE/pocket/release.jks" >> "$GITHUB_ENV"
-          fi
+      - name: Lint
+        working-directory: pocket
+        run: bash gradlew :app:lintDebug
 
-      - name: Assemble release APK
+      - name: Assemble lite APK
+        working-directory: pocket
+        run: bash gradlew :app:assembleRelease -Ppocket.updateRepo="${GITHUB_REPOSITORY}"
+
+      - name: Upload lite APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-book-pocket-lite
+          path: pocket/app/build/outputs/apk/release/*.apk
+
+  # Full build: bundles the Rust toolchain so code can be compiled on the phone
+  # (~199 MB). Only on tags and manual runs, because it downloads and repacks
+  # several hundred megabytes.
+  full:
+    needs: lite
+    if: startsWith(github.ref, 'refs/tags/pocket-v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install mdBook
+        run: |
+          cargo install mdbook --version "$MDBOOK_VERSION" --locked
+          cargo install mdbook-quiz --version "$MDBOOK_QUIZ_VERSION" --locked
+
+      - name: Build book bundle
+        run: bash pocket/scripts/build-book.sh
+
+      # The toolchain archive is expensive to rebuild, so cache it keyed on the
+      # pinned package list.
+      - name: Cache toolchain archive
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: pocket/app/src/main/assets/toolchain/toolchain.zip
+          key: toolchain-${{ runner.os }}-${{ hashFiles('pocket/spikes/local-exec/toolchain-packages.txt') }}
+
+      - name: Build toolchain archive
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        run: bash pocket/spikes/local-exec/build-toolchain.sh
+
+      - name: Assemble full APK
         working-directory: pocket
         env:
+          POCKET_KEYSTORE_PATH: ${{ secrets.POCKET_KEYSTORE_PATH }}
           POCKET_KEYSTORE_PASSWORD: ${{ secrets.POCKET_KEYSTORE_PASSWORD }}
           POCKET_KEY_ALIAS: ${{ secrets.POCKET_KEY_ALIAS }}
           POCKET_KEY_PASSWORD: ${{ secrets.POCKET_KEY_PASSWORD }}
@@ -81,14 +139,14 @@ jobs:
       - name: Collect artifacts
         run: |
           mkdir -p dist
-          name="rust-book-pocket-${GITHUB_REF_NAME:-dev}.apk"
-          cp pocket/app/build/outputs/apk/release/*.apk "dist/$name"
-          (cd dist && sha256sum "$name" > SHA256SUMS)
+          version="${GITHUB_REF_NAME:-dev}"
+          cp pocket/app/build/outputs/apk/release/*.apk "dist/rust-book-pocket-${version}.apk"
+          (cd dist && sha256sum *.apk > SHA256SUMS)
 
-      - name: Upload APK
+      - name: Upload full APK
         uses: actions/upload-artifact@v4
         with:
-          name: rust-book-pocket-apk
+          name: rust-book-pocket-full
           path: dist/*
 
       - name: Publish GitHub release
